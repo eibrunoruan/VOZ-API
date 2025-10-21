@@ -30,7 +30,14 @@ class Denuncia(models.Model):
 
     titulo = models.CharField(max_length=200)
     descricao = models.TextField()
-    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='denuncias')
+    autor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='denuncias'
+    )
+    autor_convidado = models.CharField(max_length=150, null=True, blank=True)
     categoria = models.ForeignKey(Categoria, on_delete=models.PROTECT, related_name='denuncias')
     cidade = models.ForeignKey(Cidade, on_delete=models.PROTECT, related_name='denuncias')
     estado = models.ForeignKey(Estado, on_delete=models.PROTECT, related_name='denuncias')
@@ -75,7 +82,14 @@ class Comentario(models.Model):
     Representa um comentário feito por um usuário em uma denúncia.
     """
     denuncia = models.ForeignKey(Denuncia, on_delete=models.CASCADE, related_name='comentarios')
-    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comentarios_feitos')
+    autor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='comentarios_feitos'
+    )
+    autor_convidado = models.CharField(max_length=150, null=True, blank=True)
     texto = models.TextField()
     data_criacao = models.DateTimeField(auto_now_add=True)
 
