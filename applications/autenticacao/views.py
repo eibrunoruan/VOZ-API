@@ -102,6 +102,34 @@ class PasswordResetRequestView(APIView):
         return Response({'message': 'Se um usuário com este e-mail existir, um código de verificação foi enviado.'}, status=status.HTTP_200_OK)
 
 
+class PasswordResetValidateCodeView(APIView):
+    """
+    Endpoint para validar o código de redefinição de senha.
+    Valida se o código está correto e não expirou, antes de permitir a redefinição da senha.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email')
+        code = request.data.get('code')
+
+        if not email or not code:
+            return Response({'error': 'E-mail e código são obrigatórios.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'Usuário não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.verification_code != code:
+            return Response({'error': 'Código de verificação inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.code_expires_at < timezone.now():
+            return Response({'error': 'O código de verificação expirou.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'message': 'Código validado com sucesso. Você pode redefinir sua senha.'}, status=status.HTTP_200_OK)
+
+
 class PasswordResetConfirmView(APIView):
     permission_classes = [AllowAny]
 

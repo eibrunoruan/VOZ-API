@@ -3,7 +3,8 @@ from .views import (
     RegisterView, 
     LoginView, 
     EmailVerificationView,
-    PasswordResetRequestView, 
+    PasswordResetRequestView,
+    PasswordResetValidateCodeView,
     PasswordResetConfirmView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -16,5 +17,6 @@ urlpatterns = [
 
     # URLs para Redefinição de Senha
     path('password-reset/request/', PasswordResetRequestView.as_view(), name='password_reset_request'),
+    path('password-reset/validate-code/', PasswordResetValidateCodeView.as_view(), name='password_reset_validate_code'),
     path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
 ]

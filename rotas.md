@@ -76,6 +76,18 @@ Rotas para gerenciamento de usuários, incluindo registro, login e recuperação
   }
   ```
 
+### Validar Código de Redefinição de Senha
+- **Método:** `POST`
+- **Endpoint:** `/api/auth/password-reset/validate-code/`
+- **Descrição:** Valida o código de redefinição de senha antes de permitir a alteração. Verifica se o código está correto e não expirou.
+- **Body (raw/json):**
+  ```json
+  {
+      "email": "seu_email@exemplo.com",
+      "code": "54321"
+  }
+  ```
+
 ### Confirmar Redefinição de Senha
 - **Método:** `POST`
 - **Endpoint:** `/api/auth/password-reset/confirm/`

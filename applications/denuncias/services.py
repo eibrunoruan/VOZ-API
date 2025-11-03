@@ -1,10 +1,14 @@
 from math import radians, sin, cos, sqrt, atan2
 from django.db import transaction
+import logging
 
 from .models import Denuncia, ApoioDenuncia
 
-SEARCH_RADIUS_METERS = 150
+# ✅ CORREÇÃO 1: Raio de agrupamento reduzido para 100 metros
+SEARCH_RADIUS_METERS = 100  # Alterado de 150m para 100m
 EARTH_RADIUS_KM = 6371.0
+
+logger = logging.getLogger(__name__)
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """
@@ -26,40 +30,99 @@ def criar_ou_apoiar_denuncia(validated_data, user=None, autor_convidado=None):
     """
     Cria uma nova denúncia ou adiciona um apoio a uma denúncia existente.
 
-    Verifica se já existe uma denúncia da mesma categoria dentro de um raio
-    de X metros. Se existir e o usuário estiver autenticado, cria um ApoioDenuncia.
-    Caso contrário, cria uma nova Denuncia.
+    REGRAS DE AGRUPAMENTO:
+    - ✅ Mesma categoria
+    - ✅ Raio de 100 metros
+    - ✅ Status não resolvido
+    - ✅ Permite apoio de usuários autenticados E convidados
+
+    Retorna:
+        tuple: (denuncia, created_denuncia, created_apoio)
+            - denuncia: objeto Denuncia (nova ou existente)
+            - created_denuncia: True se criou nova denúncia
+            - created_apoio: True se criou novo apoio
     """
     new_lat = validated_data.get('latitude')
     new_lon = validated_data.get('longitude')
     categoria = validated_data.get('categoria')
 
+    logger.info(f"🆕 Nova denúncia/apoio recebido:")
+    logger.info(f"   Categoria: {categoria.nome}")
+    logger.info(f"   Coordenadas: {new_lat}, {new_lon}")
+    logger.info(f"   Usuário: {user.username if user else autor_convidado}")
+
     with transaction.atomic():
-        denuncias_candidatas = Denuncia.objects.filter(categoria=categoria).order_by('-data_criacao')
+        # ✅ CORREÇÃO 2: Buscar denúncias da MESMA CATEGORIA e não resolvidas
+        denuncias_candidatas = Denuncia.objects.filter(
+            categoria=categoria,
+            status__in=[Denuncia.Status.ABERTA, Denuncia.Status.EM_ANALISE]  # Não agrupa com resolvidas
+        ).order_by('-data_criacao')
+
+        logger.info(f"🔍 Buscando denúncias similares:")
+        logger.info(f"   Raio: {SEARCH_RADIUS_METERS}m")
+        logger.info(f"   Categoria: {categoria.nome}")
+        logger.info(f"   Candidatas encontradas: {denuncias_candidatas.count()}")
 
         denuncia_proxima = None
-        if user:  # Apenas usuários logados podem apoiar
-            for denuncia in denuncias_candidatas:
-                distancia = haversine_distance(
-                    new_lat, new_lon,
-                    denuncia.latitude, denuncia.longitude
-                )
-                if distancia <= SEARCH_RADIUS_METERS:
-                    denuncia_proxima = denuncia
-                    break
+        distancia_encontrada = None
+        
+        # Buscar denúncia próxima (tanto para usuários quanto convidados)
+        for denuncia in denuncias_candidatas:
+            distancia = haversine_distance(
+                new_lat, new_lon,
+                denuncia.latitude, denuncia.longitude
+            )
+            logger.debug(f"   Denúncia #{denuncia.id}: {distancia:.2f}m")
+            
+            if distancia <= SEARCH_RADIUS_METERS:
+                denuncia_proxima = denuncia
+                distancia_encontrada = distancia
+                break
 
-        if denuncia_proxima and user:
-            if ApoioDenuncia.objects.filter(denuncia=denuncia_proxima, apoiador=user).exists():
+        # ✅ CORREÇÃO 3: Se encontrou denúncia próxima, criar apoio
+        if denuncia_proxima:
+            logger.info(f"✅ Denúncia similar encontrada (ID #{denuncia_proxima.id})")
+            logger.info(f"   Distância: {distancia_encontrada:.2f} metros")
+            logger.info(f"   Adicionando apoio...")
+
+            # Verificar se já existe apoio deste usuário/convidado
+            if user:
+                # Usuário autenticado - verificar por apoiador
+                apoio_existente = ApoioDenuncia.objects.filter(
+                    denuncia=denuncia_proxima,
+                    apoiador=user
+                ).exists()
+            else:
+                # Convidado - não verificar duplicata (pode apoiar múltiplas vezes)
+                # Isso permite que diferentes convidados apoiem, mesmo que usem o mesmo nome
+                apoio_existente = False
+
+            if apoio_existente:
+                logger.info(f"⚠️  Usuário {user.username} já apoiou esta denúncia")
                 return denuncia_proxima, False, False
 
-            ApoioDenuncia.objects.create(denuncia=denuncia_proxima, apoiador=user)
+            # Criar apoio
+            ApoioDenuncia.objects.create(
+                denuncia=denuncia_proxima,
+                apoiador=user if user else None
+            )
+            
+            logger.info(f"✅ Apoio registrado com sucesso!")
+            logger.info(f"   Total de apoios: {denuncia_proxima.apoios.count()}")
+            
             return denuncia_proxima, False, True
 
-        # Cria uma nova denúncia se não houver próxima ou se for convidado
+        # Não encontrou denúncia similar - criar nova
+        logger.info(f"✅ Nenhuma denúncia similar encontrada em {SEARCH_RADIUS_METERS}m")
+        logger.info(f"   Criando nova denúncia...")
+        
         denuncia_data = {
             'autor': user if user else None,
             'autor_convidado': autor_convidado if not user else None,
             **validated_data
         }
         nova_denuncia = Denuncia.objects.create(**denuncia_data)
+        
+        logger.info(f"✅ Nova denúncia criada (ID #{nova_denuncia.id})")
+        
         return nova_denuncia, True, False

@@ -31,7 +31,7 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 class CategoriaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Categoria.objects.all()
     serializer_class = CategoriaSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]  # Permite acesso sem autenticação
 
 
 class DenunciaViewSet(viewsets.ModelViewSet):
@@ -60,7 +60,7 @@ class DenunciaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        denuncia, created_denuncia, _ = criar_ou_apoiar_denuncia(
+        denuncia, created_denuncia, created_apoio = criar_ou_apoiar_denuncia(
             serializer.validated_data,
             user=user,
             autor_convidado=autor_convidado
@@ -71,10 +71,36 @@ class DenunciaViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(response_serializer.data)
 
         if created_denuncia:
-            return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            # Nova denúncia criada
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_201_CREATED,
+                headers=headers
+            )
         
-        # Se uma denúncia existente foi apoiada, o status é 200 OK.
-        return Response(response_serializer.data, status=status.HTTP_200_OK, headers=headers)
+        elif created_apoio:
+            # Apoio adicionado a denúncia existente
+            return Response(
+                {
+                    'message': 'Denúncia similar encontrada próxima. Seu apoio foi registrado!',
+                    'apoio_adicionado': True,
+                    'denuncia': response_serializer.data
+                },
+                status=status.HTTP_200_OK,
+                headers=headers
+            )
+        
+        else:
+            # Usuário já havia apoiado esta denúncia
+            return Response(
+                {
+                    'message': 'Você já apoiou esta denúncia anteriormente.',
+                    'apoio_adicionado': False,
+                    'denuncia': response_serializer.data
+                },
+                status=status.HTTP_200_OK,
+                headers=headers
+            )
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def resolver(self, request, pk=None):
