@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -209,11 +210,11 @@ NOMINATIM_API_ENDPOINT = 'https://nominatim.openstreetmap.org/reverse'
 # Altere para o e-mail do administrador do projeto.
 NOMINATIM_USER_AGENT = 'VozDoPovo Backend (seu.email@dominio.com)'
 
-# --- Configurações de E-mail (Mailtrap para desenvolvimento) ---
+# --- Configurações de E-mail (Brevo SMTP) ---
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
+EMAIL_HOST = 'smtp-relay.brevo.com'
 EMAIL_PORT = 587
-EMAIL_HOST_USER = '0e76a6b2e97fe5'
-EMAIL_HOST_PASSWORD = 'a0b07525c07e19'
+EMAIL_HOST_USER = config('BREVO_SMTP_USER')
+EMAIL_HOST_PASSWORD = config('BREVO_SMTP_PASSWORD')
 EMAIL_USE_TLS = True
-DEFAULT_FROM_EMAIL = 'Voz do Povo <noreply@vozodopovo.com.br>'
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Voz do Povo <noreply@vozodopovo.com>')

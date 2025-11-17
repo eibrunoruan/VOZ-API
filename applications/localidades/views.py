@@ -71,9 +71,9 @@ class AnalisarLocalizacaoView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Nominatim pode retornar 'city', 'town', ou 'village'
-        cidade = address.get('city', address.get('town', address.get('village')))
-        estado = address.get('state')
+        # Nominatim pode retornar 'city', 'town', 'village', 'municipality' ou 'county'
+        cidade_nome = address.get('city') or address.get('municipality') or address.get('town') or address.get('village') or address.get('county')
+        estado_nome = address.get('state')
         
         # Lógica simples para sugerir jurisdição
         categoria_osm = data.get('category')
@@ -82,9 +82,34 @@ class AnalisarLocalizacaoView(APIView):
         else:
             jurisdicao_sugerida = 'MUNICIPAL'
 
+        # Buscar estado no banco de dados
+        estado_obj = None
+        estado_id = None
+        if estado_nome:
+            estado_obj = Estado.objects.filter(nome__icontains=estado_nome).first()
+            if estado_obj:
+                estado_id = estado_obj.id
+
+        # Buscar cidade no banco de dados
+        cidade_obj = None
+        cidade_id = None
+        cidade_identificada = False
+        
+        if cidade_nome and estado_obj:
+            cidade_obj = Cidade.objects.filter(
+                nome__icontains=cidade_nome,
+                estado=estado_obj
+            ).first()
+            if cidade_obj:
+                cidade_id = cidade_obj.id
+                cidade_identificada = True
+
         return Response({
-            'cidade': cidade,
-            'estado': estado,
+            'cidade': cidade_nome,
+            'cidade_id': cidade_id,
+            'cidade_identificada': cidade_identificada,
+            'estado': estado_nome,
+            'estado_id': estado_id,
             'jurisdicao_sugerida': jurisdicao_sugerida,
             'dados_completos_osm': address # Opcional: para debug
         })

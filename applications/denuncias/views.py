@@ -40,6 +40,24 @@ class DenunciaViewSet(viewsets.ModelViewSet):
     ).prefetch_related('apoios', 'comentarios')
     serializer_class = DenunciaSerializer
 
+    def get_queryset(self):
+        """
+        Filtra denúncias por status e categoria via query params.
+        """
+        queryset = super().get_queryset()
+        
+        # Filtrar por status
+        status_param = self.request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        
+        # Filtrar por categoria
+        categoria_param = self.request.query_params.get('categoria', None)
+        if categoria_param:
+            queryset = queryset.filter(categoria_id=categoria_param)
+        
+        return queryset
+
     def get_permissions(self):
         if self.action in ['update', 'partial_update', 'destroy']:
             permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
@@ -101,6 +119,115 @@ class DenunciaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_200_OK,
                 headers=headers
             )
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Permite exclusão de denúncia transferindo apoios para outra denúncia similar próxima.
+        Se não houver denúncia similar, promove o apoio mais antigo como nova denúncia.
+        """
+        from .services import haversine_distance, SEARCH_RADIUS_METERS
+        from django.db import transaction
+        
+        denuncia = self.get_object()
+        
+        # Verificar se é o autor
+        if request.user.is_authenticated:
+            if denuncia.autor != request.user:
+                return Response(
+                    {'detail': 'Apenas o autor pode deletar sua própria denúncia.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Obter apoios antes de deletar
+        apoios = list(denuncia.apoios.all().select_related('apoiador'))
+        total_apoios = len(apoios)
+        
+        if total_apoios > 0:
+            with transaction.atomic():
+                # Buscar denúncia similar próxima para transferir apoios
+                denuncias_proximas = Denuncia.objects.filter(
+                    categoria=denuncia.categoria,
+                    status__in=['ABERTA', 'EM_ANALISE']  # Apenas não resolvidas
+                ).exclude(id=denuncia.id)
+                
+                denuncia_destino = None
+                for candidata in denuncias_proximas:
+                    distancia = haversine_distance(
+                        denuncia.latitude, denuncia.longitude,
+                        candidata.latitude, candidata.longitude
+                    )
+                    if distancia <= SEARCH_RADIUS_METERS:
+                        denuncia_destino = candidata
+                        break
+                
+                if denuncia_destino:
+                    # Transferir apoios para denúncia similar
+                    apoios_transferidos = 0
+                    for apoio in apoios:
+                        # Verificar se o apoiador já não apoiou a denúncia destino
+                        if not denuncia_destino.apoios.filter(apoiador=apoio.apoiador).exists():
+                            apoio.denuncia = denuncia_destino
+                            apoio.save()
+                            apoios_transferidos += 1
+                        else:
+                            # Se já apoiou, apenas remove o apoio duplicado
+                            apoio.delete()
+                    
+                    # Deletar a denúncia original
+                    denuncia.delete()
+                    
+                    return Response(
+                        {
+                            'message': f'Denúncia deletada com sucesso. {apoios_transferidos} apoio(s) foram transferidos para uma denúncia similar próxima.',
+                            'apoios_transferidos': apoios_transferidos,
+                            'denuncia_destino_id': denuncia_destino.id
+                        },
+                        status=status.HTTP_200_OK
+                    )
+                else:
+                    # Não encontrou denúncia similar - promover apoio mais antigo
+                    apoio_mais_antigo = apoios[0] if apoios else None
+                    
+                    if apoio_mais_antigo:
+                        # Criar nova denúncia a partir do apoio mais antigo
+                        nova_denuncia = Denuncia.objects.create(
+                            titulo=denuncia.titulo,
+                            descricao=f"[Denúncia promovida automaticamente] {denuncia.descricao}",
+                            autor=apoio_mais_antigo.apoiador,
+                            categoria=denuncia.categoria,
+                            cidade=denuncia.cidade,
+                            estado=denuncia.estado,
+                            foto=denuncia.foto,
+                            endereco=denuncia.endereco,
+                            latitude=denuncia.latitude,
+                            longitude=denuncia.longitude,
+                            jurisdicao=denuncia.jurisdicao,
+                            status=denuncia.status
+                        )
+                        
+                        # Transferir apoios restantes (exceto o primeiro)
+                        for apoio in apoios[1:]:
+                            if not nova_denuncia.apoios.filter(apoiador=apoio.apoiador).exists():
+                                apoio.denuncia = nova_denuncia
+                                apoio.save()
+                        
+                        # Deletar apoio original que virou denúncia
+                        apoio_mais_antigo.delete()
+                        
+                        # Deletar denúncia original
+                        denuncia.delete()
+                        
+                        return Response(
+                            {
+                                'message': f'Denúncia deletada com sucesso. O apoio mais antigo foi promovido como nova denúncia principal e {len(apoios)-1} apoio(s) foram preservados.',
+                                'nova_denuncia_id': nova_denuncia.id,
+                                'apoios_preservados': len(apoios) - 1
+                            },
+                            status=status.HTTP_200_OK
+                        )
+        
+        # Se não houver apoios, permite exclusão normal
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def resolver(self, request, pk=None):

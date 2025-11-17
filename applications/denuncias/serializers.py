@@ -16,7 +16,7 @@ class DenunciaSerializer(serializers.ModelSerializer):
         model = Denuncia
         fields = [
             'id', 'titulo', 'descricao', 'autor', 'autor_convidado', 'categoria', 'cidade', 'estado',
-            'foto', 'latitude', 'longitude', 'jurisdicao', 'status',
+            'foto', 'endereco', 'latitude', 'longitude', 'jurisdicao', 'status',
             'data_criacao', 'total_apoios'
         ]
         read_only_fields = ('autor', 'data_criacao')

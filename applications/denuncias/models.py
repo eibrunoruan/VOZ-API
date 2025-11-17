@@ -45,6 +45,9 @@ class Denuncia(models.Model):
     # A foto é obrigatória
     foto = models.ImageField(upload_to='denuncias_fotos/', blank=False, null=False)
     
+    # Endereço textual da denúncia
+    endereco = models.CharField(max_length=500, blank=True, null=True)
+    
     # Usar DecimalField para precisão de coordenadas
     latitude = models.DecimalField(max_digits=10, decimal_places=8)
     longitude = models.DecimalField(max_digits=11, decimal_places=8)
