@@ -17,12 +17,11 @@ class Command(BaseCommand):
             self.stdout.write(f'Buscando cidades para o estado de {estado.nome}...')
             try:
                 response = requests.get(f'https://servicodados.ibge.gov.br/api/v1/localidades/estados/{estado.uf}/municipios')
-                response.raise_for_status()  # Lança uma exceção para respostas de erro (4xx ou 5xx)
+                response.raise_for_status()
                 cidades_data = response.json()
 
                 for cidade_data in cidades_data:
                     nome_cidade = cidade_data['nome']
-                    # Verifica se a cidade já existe para evitar duplicatas
                     if not Cidade.objects.filter(nome=nome_cidade, estado=estado).exists():
                         Cidade.objects.create(nome=nome_cidade, estado=estado)
                         self.stdout.write(self.style.SUCCESS(f'  - Cidade "{nome_cidade}" adicionada.'))

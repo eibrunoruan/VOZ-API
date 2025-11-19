@@ -8,11 +8,7 @@ from .models import Categoria, Denuncia, ApoioDenuncia, Comentario
 from .serializers import CategoriaSerializer, DenunciaSerializer, ApoioDenunciaSerializer, ComentarioSerializer
 from .services import criar_ou_apoiar_denuncia
 
-
 class IsOwnerOrReadOnly(permissions.BasePermission):
-    """
-    Permissão customizada para permitir que apenas os donos de um objeto possam editá-lo.
-    """
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
@@ -27,12 +23,10 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
         
         return False
 
-
 class CategoriaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Categoria.objects.all()
     serializer_class = CategoriaSerializer
-    permission_classes = [permissions.AllowAny]  # Permite acesso sem autenticação
-
+    permission_classes = [permissions.AllowAny]
 
 class DenunciaViewSet(viewsets.ModelViewSet):
     queryset = Denuncia.objects.all().select_related(
@@ -41,17 +35,12 @@ class DenunciaViewSet(viewsets.ModelViewSet):
     serializer_class = DenunciaSerializer
 
     def get_queryset(self):
-        """
-        Filtra denúncias por status e categoria via query params.
-        """
         queryset = super().get_queryset()
         
-        # Filtrar por status
         status_param = self.request.query_params.get('status', None)
         if status_param:
             queryset = queryset.filter(status=status_param)
         
-        # Filtrar por categoria
         categoria_param = self.request.query_params.get('categoria', None)
         if categoria_param:
             queryset = queryset.filter(categoria_id=categoria_param)
@@ -84,12 +73,10 @@ class DenunciaViewSet(viewsets.ModelViewSet):
             autor_convidado=autor_convidado
         )
 
-        # Usar o serializer da denúncia retornada para a resposta
         response_serializer = self.get_serializer(denuncia)
         headers = self.get_success_headers(response_serializer.data)
 
         if created_denuncia:
-            # Nova denúncia criada
             return Response(
                 response_serializer.data,
                 status=status.HTTP_201_CREATED,
@@ -97,7 +84,6 @@ class DenunciaViewSet(viewsets.ModelViewSet):
             )
         
         elif created_apoio:
-            # Apoio adicionado a denúncia existente
             return Response(
                 {
                     'message': 'Denúncia similar encontrada próxima. Seu apoio foi registrado!',
@@ -109,7 +95,6 @@ class DenunciaViewSet(viewsets.ModelViewSet):
             )
         
         else:
-            # Usuário já havia apoiado esta denúncia
             return Response(
                 {
                     'message': 'Você já apoiou esta denúncia anteriormente.',
@@ -121,16 +106,11 @@ class DenunciaViewSet(viewsets.ModelViewSet):
             )
 
     def destroy(self, request, *args, **kwargs):
-        """
-        Permite exclusão de denúncia transferindo apoios para outra denúncia similar próxima.
-        Se não houver denúncia similar, promove o apoio mais antigo como nova denúncia.
-        """
         from .services import haversine_distance, SEARCH_RADIUS_METERS
         from django.db import transaction
         
         denuncia = self.get_object()
         
-        # Verificar se é o autor
         if request.user.is_authenticated:
             if denuncia.autor != request.user:
                 return Response(
@@ -138,16 +118,14 @@ class DenunciaViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
         
-        # Obter apoios antes de deletar
         apoios = list(denuncia.apoios.all().select_related('apoiador'))
         total_apoios = len(apoios)
         
         if total_apoios > 0:
             with transaction.atomic():
-                # Buscar denúncia similar próxima para transferir apoios
                 denuncias_proximas = Denuncia.objects.filter(
                     categoria=denuncia.categoria,
-                    status__in=['ABERTA', 'EM_ANALISE']  # Apenas não resolvidas
+                    status__in=['ABERTA', 'EM_ANALISE']
                 ).exclude(id=denuncia.id)
                 
                 denuncia_destino = None
@@ -161,19 +139,15 @@ class DenunciaViewSet(viewsets.ModelViewSet):
                         break
                 
                 if denuncia_destino:
-                    # Transferir apoios para denúncia similar
                     apoios_transferidos = 0
                     for apoio in apoios:
-                        # Verificar se o apoiador já não apoiou a denúncia destino
                         if not denuncia_destino.apoios.filter(apoiador=apoio.apoiador).exists():
                             apoio.denuncia = denuncia_destino
                             apoio.save()
                             apoios_transferidos += 1
                         else:
-                            # Se já apoiou, apenas remove o apoio duplicado
                             apoio.delete()
                     
-                    # Deletar a denúncia original
                     denuncia.delete()
                     
                     return Response(
@@ -185,11 +159,9 @@ class DenunciaViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_200_OK
                     )
                 else:
-                    # Não encontrou denúncia similar - promover apoio mais antigo
                     apoio_mais_antigo = apoios[0] if apoios else None
                     
                     if apoio_mais_antigo:
-                        # Criar nova denúncia a partir do apoio mais antigo
                         nova_denuncia = Denuncia.objects.create(
                             titulo=denuncia.titulo,
                             descricao=f"[Denúncia promovida automaticamente] {denuncia.descricao}",
@@ -205,16 +177,13 @@ class DenunciaViewSet(viewsets.ModelViewSet):
                             status=denuncia.status
                         )
                         
-                        # Transferir apoios restantes (exceto o primeiro)
                         for apoio in apoios[1:]:
                             if not nova_denuncia.apoios.filter(apoiador=apoio.apoiador).exists():
                                 apoio.denuncia = nova_denuncia
                                 apoio.save()
                         
-                        # Deletar apoio original que virou denúncia
                         apoio_mais_antigo.delete()
                         
-                        # Deletar denúncia original
                         denuncia.delete()
                         
                         return Response(
@@ -226,7 +195,6 @@ class DenunciaViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_200_OK
                         )
         
-        # Se não houver apoios, permite exclusão normal
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
@@ -266,7 +234,6 @@ class DenunciaViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(denuncia)
         return Response(serializer.data)
 
-
 class ApoioDenunciaViewSet(mixins.CreateModelMixin,
                            mixins.RetrieveModelMixin,
                            mixins.DestroyModelMixin,
@@ -280,7 +247,6 @@ class ApoioDenunciaViewSet(mixins.CreateModelMixin,
 
     def perform_create(self, serializer):
         serializer.save(apoiador=self.request.user)
-
 
 class ComentarioViewSet(viewsets.ModelViewSet):
     serializer_class = ComentarioSerializer

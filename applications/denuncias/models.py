@@ -4,7 +4,6 @@ from django.utils.translation import gettext_lazy as _
 from applications.localidades.models import Cidade, Estado
 
 class Categoria(models.Model):
-    """Modelo para as categorias de denúncias (ex: Iluminação, Saneamento)."""
     nome = models.CharField(max_length=100, unique=True)
 
     class Meta:
@@ -15,7 +14,6 @@ class Categoria(models.Model):
         return self.nome
 
 class Denuncia(models.Model):
-    """A entidade central do sistema, representando uma denúncia."""
 
     class Jurisdicao(models.TextChoices):
         MUNICIPAL = 'MUNICIPAL', _('Municipal')
@@ -42,13 +40,10 @@ class Denuncia(models.Model):
     cidade = models.ForeignKey(Cidade, on_delete=models.PROTECT, related_name='denuncias')
     estado = models.ForeignKey(Estado, on_delete=models.PROTECT, related_name='denuncias')
     
-    # A foto é obrigatória
     foto = models.ImageField(upload_to='denuncias_fotos/', blank=False, null=False)
     
-    # Endereço textual da denúncia
     endereco = models.CharField(max_length=500, blank=True, null=True)
     
-    # Usar DecimalField para precisão de coordenadas
     latitude = models.DecimalField(max_digits=10, decimal_places=8)
     longitude = models.DecimalField(max_digits=11, decimal_places=8)
     
@@ -66,7 +61,6 @@ class Denuncia(models.Model):
         return self.titulo
 
 class ApoioDenuncia(models.Model):
-    """Representa o apoio (reclamação agrupada) de um usuário a uma denúncia existente."""
     denuncia = models.ForeignKey(Denuncia, on_delete=models.CASCADE, related_name='apoios')
     apoiador = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='apoios_dados')
     data_apoio = models.DateTimeField(auto_now_add=True)
@@ -74,16 +68,12 @@ class ApoioDenuncia(models.Model):
     class Meta:
         verbose_name = _('Apoio de Denúncia')
         verbose_name_plural = _('Apoios de Denúncias')
-        # Garante que um usuário só pode apoiar uma denúncia uma única vez
         unique_together = [['denuncia', 'apoiador']]
 
     def __str__(self):
         return f'{self.apoiador} apoiou {self.denuncia.titulo}'
 
 class Comentario(models.Model):
-    """
-    Representa um comentário feito por um usuário em uma denúncia.
-    """
     denuncia = models.ForeignKey(Denuncia, on_delete=models.CASCADE, related_name='comentarios')
     autor = models.ForeignKey(
         settings.AUTH_USER_MODEL, 

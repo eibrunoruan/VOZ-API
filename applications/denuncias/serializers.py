@@ -30,7 +30,6 @@ class DenunciaSerializer(serializers.ModelSerializer):
 
         if user.is_authenticated:
             if autor_convidado:
-                # Não faz sentido ter um autor convidado se o usuário está logado
                 raise serializers.ValidationError('Usuários autenticados não devem fornecer um nome de convidado.')
             return data
         
@@ -52,9 +51,6 @@ class ApoioDenunciaSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 class ComentarioSerializer(serializers.ModelSerializer):
-    """
-    Serializer para o modelo Comentario.
-    """
     autor = UserSerializer(read_only=True, required=False)
     autor_convidado = serializers.CharField(max_length=150, required=False)
 

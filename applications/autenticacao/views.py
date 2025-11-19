@@ -10,25 +10,19 @@ from applications.core.models import User
 from .serializers import UserSerializer
 from .services import send_verification_email
 
-
 class RegisterView(generics.CreateAPIView):
-    """
-    Endpoint para registro de novos usuários.
-    Após o registro, o usuário é criado como inativo e um e-mail de verificação é enviado.
-    """
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = UserSerializer
 
     def perform_create(self, serializer):
         user = serializer.save()
-        user.is_active = False  # Desativa o usuário até a verificação do e-mail
+        user.is_active = False
         user.save()
 
         subject = "Bem-vindo ao Voz do Povo! Ative sua conta."
         message = "Seu código de ativação é: {code}"
         send_verification_email(user, subject, message)
-
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
@@ -38,17 +32,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 class LoginView(TokenObtainPairView):
-    """
-    Endpoint para login. Retorna um par de tokens de acesso e atualização.
-    Impede o login de usuários que não verificaram o e-mail.
-    """
     serializer_class = CustomTokenObtainPairSerializer
 
-
 class EmailVerificationView(APIView):
-    """
-    Endpoint para verificar o e-mail de um usuário com o código enviado.
-    """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
@@ -80,7 +66,6 @@ class EmailVerificationView(APIView):
 
         return Response({'message': 'E-mail verificado com sucesso! Você já pode fazer o login.'}, status=status.HTTP_200_OK)
 
-
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
 
@@ -92,7 +77,6 @@ class PasswordResetRequestView(APIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            # Não revele que o usuário não existe por segurança
             pass
         else:
             subject = "Seu código de redefinição de senha"
@@ -101,12 +85,7 @@ class PasswordResetRequestView(APIView):
 
         return Response({'message': 'Se um usuário com este e-mail existir, um código de verificação foi enviado.'}, status=status.HTTP_200_OK)
 
-
 class PasswordResetValidateCodeView(APIView):
-    """
-    Endpoint para validar o código de redefinição de senha.
-    Valida se o código está correto e não expirou, antes de permitir a redefinição da senha.
-    """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
@@ -128,7 +107,6 @@ class PasswordResetValidateCodeView(APIView):
             return Response({'error': 'O código de verificação expirou.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({'message': 'Código validado com sucesso. Você pode redefinir sua senha.'}, status=status.HTTP_200_OK)
-
 
 class PasswordResetConfirmView(APIView):
     permission_classes = [AllowAny]
@@ -155,7 +133,7 @@ class PasswordResetConfirmView(APIView):
         user.set_password(password)
         user.verification_code = None
         user.code_expires_at = None
-        user.is_email_verified = True # A redefinição de senha também pode verificar o e-mail
+        user.is_email_verified = True
         user.is_active = True
         user.save()
 

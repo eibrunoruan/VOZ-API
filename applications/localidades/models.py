@@ -1,7 +1,6 @@
 from django.db import models
 
 class Estado(models.Model):
-    """Modelo que representa um Estado da federação."""
     nome = models.CharField(max_length=50, unique=True)
     uf = models.CharField(max_length=2, unique=True)
 
@@ -13,7 +12,6 @@ class Estado(models.Model):
         return self.nome
 
 class Cidade(models.Model):
-    """Modelo que representa uma Cidade e sua relação com um Estado."""
     nome = models.CharField(max_length=100)
     estado = models.ForeignKey(Estado, on_delete=models.PROTECT, related_name='cidades')
 

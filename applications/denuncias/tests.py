@@ -9,15 +9,11 @@ from io import BytesIO
 from PIL import Image
 
 def create_dummy_image():
-    """
-    Cria uma imagem PNG 1x1 em memória para testes.
-    """
     image_file = BytesIO()
     image = Image.new('RGB', (1, 1), 'black')
     image.save(image_file, 'png')
     image_file.seek(0)
     return SimpleUploadedFile('test.png', image_file.read(), content_type='image/png')
-
 
 class DenunciaAPITests(APITestCase):
     def setUp(self):

@@ -3,11 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-*.egg
+.Python
 *.egg-info/
 dist/
 build/
-*.pyc
 .venv/
 venv/
 ENV/
@@ -16,11 +15,10 @@ ENV/
 *.log
 db.sqlite3
 db.sqlite3-journal
-/media
-/staticfiles
+/staticfiles/
+/media/
 
-# Environment variables
-.env
+# Environment
 .env.local
 .env.*.local
 
@@ -35,17 +33,28 @@ db.sqlite3-journal
 .DS_Store
 Thumbs.db
 
-# Uploads
-denuncias_fotos/
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+!rotas.md
 
 # Test files
+*.test.py
 test_*.py
 *_test.py
-locustfile.py
-descobrir_valores_flutter.py
-testar_agrupamento.py
-check_sp.py
 
-# Scripts
-*.bat
-*.ps1
+# Temporary files
+*.tmp
+*.bak
+*.cache
+
+# Images/Media in root (keep denuncias_fotos/)
+*.jpg
+*.jpeg
+*.png
+*.gif
+!denuncias_fotos/

@@ -10,12 +10,7 @@ from applications.denuncias.serializers import DenunciaSerializer
 from .serializers import OfficialResponseSerializer
 from .models import OfficialResponse
 
-
 class MinhasDenunciasViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Endpoint da API que retorna as denúncias relevantes para o gestor público logado.
-    Filtra as denúncias com base na entidade governamental associada ao gestor.
-    """
     serializer_class = DenunciaSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -42,12 +37,7 @@ class MinhasDenunciasViewSet(viewsets.ReadOnlyModelViewSet):
         
         return Denuncia.objects.none()
 
-
 class CanRespondToDenuncia(permissions.BasePermission):
-    """
-    Permissão para garantir que um gestor só pode responder a uma denúncia
-    que pertence à sua jurisdição.
-    """
     message = "Você não tem permissão para responder a esta denúncia ou a denúncia não foi encontrada."
 
     def has_permission(self, request, view):
@@ -82,13 +72,7 @@ class CanRespondToDenuncia(permissions.BasePermission):
 
         return denuncias_permitidas.filter(pk=denuncia_id).exists()
 
-
 class OfficialResponseViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin):
-    """
-    ViewSet para criar, listar e ver OfficialResponse.
-    - A criação de uma resposta é restrita a gestores da jurisdição correta.
-    - A listagem retorna apenas as respostas da entidade do gestor logado.
-    """
     serializer_class = OfficialResponseSerializer
     permission_classes = [permissions.IsAuthenticated, CanRespondToDenuncia]
 
@@ -103,15 +87,9 @@ class OfficialResponseViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin, 
     def perform_create(self, serializer):
         entidade = self.request.user.entidades_gerenciadas.first()
         
-        # O modelo já garante que a denúncia só pode ter uma resposta (OneToOneField),
-        # então o banco de dados vai gerar um erro de integridade se tentarem criar uma segunda.
         serializer.save(entidade=entidade)
 
-
 class DashboardView(APIView):
-    """
-    Endpoint que retorna dados estatísticos para o dashboard do gestor público.
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
@@ -123,7 +101,6 @@ class DashboardView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Reutiliza a lógica de filtragem do MinhasDenunciasViewSet
         denuncias_queryset = MinhasDenunciasViewSet().get_queryset(self.request)
 
         if not denuncias_queryset.exists():
@@ -133,14 +110,11 @@ class DashboardView(APIView):
                 'categoria_counts': {},
             })
 
-        # Calcula o total de denúncias
         total_denuncias = denuncias_queryset.count()
 
-        # Calcula a contagem por status
         status_counts_query = denuncias_queryset.values('status').annotate(count=Count('status')).order_by('-count')
         status_counts = {item['status']: item['count'] for item in status_counts_query}
 
-        # Calcula a contagem por categoria
         categoria_counts_query = denuncias_queryset.values('categoria__nome').annotate(count=Count('categoria__nome')).order_by('-count')
         categoria_counts = {item['categoria__nome']: item['count'] for item in categoria_counts_query}
 
@@ -152,11 +126,7 @@ class DashboardView(APIView):
 
         return Response(data)
 
-
 class DenunciasPorPeriodoView(APIView):
-    """
-    Endpoint que retorna a contagem de denúncias agrupadas por um período de tempo.
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
@@ -168,7 +138,6 @@ class DenunciasPorPeriodoView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Define os possíveis agrupamentos e suas funções Trunc correspondentes
         periodo_mapping = {
             'dia': TruncDay,
             'semana': TruncWeek,
@@ -184,10 +153,8 @@ class DenunciasPorPeriodoView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Reutiliza a lógica de filtragem do MinhasDenunciasViewSet
         base_queryset = MinhasDenunciasViewSet().get_queryset(self.request)
 
-        # Filtra por data, se fornecido
         start_date_str = request.query_params.get('start_date')
         end_date_str = request.query_params.get('end_date')
         if start_date_str:
@@ -195,10 +162,8 @@ class DenunciasPorPeriodoView(APIView):
         if end_date_str:
             base_queryset = base_queryset.filter(data_criacao__lte=datetime.fromisoformat(end_date_str))
 
-        # Aplica a função de truncagem dinamicamente
         trunc_function = periodo_mapping[periodo]('data_criacao')
 
-        # Realiza a agregação
         queryset = (
             base_queryset
             .annotate(periodo_agrupado=trunc_function)
@@ -207,7 +172,6 @@ class DenunciasPorPeriodoView(APIView):
             .order_by('periodo_agrupado')
         )
 
-        # Formata a saída
         data = [
             {
                 "data": item['periodo_agrupado'].strftime('%Y-%m-%d'), 
@@ -217,11 +181,7 @@ class DenunciasPorPeriodoView(APIView):
         ]
         return Response(data)
 
-
 class HeatmapView(APIView):
-    """
-    Endpoint que retorna dados para a geração de um mapa de calor.
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
@@ -233,10 +193,8 @@ class HeatmapView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Reutiliza a lógica de filtragem do MinhasDenunciasViewSet
         base_queryset = MinhasDenunciasViewSet().get_queryset(self.request)
 
-        # Anota o peso como 1 (denúncia original) + número de apoios
         heatmap_data = (
             base_queryset
             .annotate(apoios_count=Count('apoios'))

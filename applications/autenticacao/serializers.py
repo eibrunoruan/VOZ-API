@@ -2,9 +2,6 @@ from rest_framework import serializers
 from applications.core.models import User
 
 class UserSerializer(serializers.ModelSerializer):
-    """
-    Serializer para criar e validar novos usuários.
-    """
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'password', 'first_name')
@@ -13,9 +10,6 @@ class UserSerializer(serializers.ModelSerializer):
         }
 
     def create(self, validated_data):
-        """
-        Cria e retorna um novo usuário com uma senha hasheada.
-        """
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
