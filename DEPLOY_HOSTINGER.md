@@ -59,6 +59,7 @@ NOMINATIM_USER_AGENT=VozDoPovo Backend
 Após o container subir, acesse o terminal do container no painel Hostinger e execute:
 
 ```bash
+python manage.py collectstatic --noinput
 python manage.py migrate
 python manage.py populate_cities
 python manage.py createsuperuser
