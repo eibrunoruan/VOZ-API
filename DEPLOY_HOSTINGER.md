@@ -20,7 +20,7 @@
 No painel do Hostinger, configure as seguintes variáveis de ambiente:
 
 ```env
-SECRET_KEY=sua_secret_key_aqui_use_um_gerador
+SECRET_KEY='django-insecure-a*1j$l6mk-vuwxc!s0md&osq$4(9pg5t+3!sn0s#0*#8k6g$&x'
 DEBUG=False
 ALLOWED_HOSTS=seu-dominio.com,www.seu-dominio.com
 
