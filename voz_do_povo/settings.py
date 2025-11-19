@@ -152,7 +152,7 @@ NOMINATIM_USER_AGENT = config('NOMINATIM_USER_AGENT', default='VozDoPovo Backend
 
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = config('EMAIL_HOST', default='smtp-relay.brevo.com')
-EMAIL_PORT = int(config('EMAIL_PORT', default='587'))
+EMAIL_PORT = int(config('EMAIL_PORT', default='587') or '587')
 EMAIL_HOST_USER = config('BREVO_SMTP_USER', default='')
 EMAIL_HOST_PASSWORD = config('BREVO_SMTP_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
