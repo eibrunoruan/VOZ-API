@@ -122,8 +122,11 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-cloudinary_url = config('CLOUDINARY_URL')
-cloudinary.config(cloudinary_url=cloudinary_url)
+# Configuração do Cloudinary
+# Formato da URL: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+import os
+os.environ['CLOUDINARY_URL'] = config('CLOUDINARY_URL')
+cloudinary.config()  # Lê automaticamente de os.environ['CLOUDINARY_URL']
 
 MEDIA_URL = '/media/'
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'

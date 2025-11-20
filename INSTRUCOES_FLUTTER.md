@@ -433,63 +433,148 @@ await _centralizarNoUsuario();
 ```
 
 ### Causa Raiz:
-O **Cloudinary NÃO está ativo no VPS**! O Django está tentando:
-1. Carregar imagens do `/media/` local (que não existe no container)
-2. Fazer requisições HTTP para URLs locais quebradas
-3. Admin tenta renderizar thumbnails de 100+ denúncias
-4. Cada imagem demora 30s+ para timeout
-5. Worker morre após 300s (5 minutos)
+O **Cloudinary estava CONFIGURADO ERRADO no settings.py**! 
 
-### Solução IMEDIATA:
+**Problema no código:**
+```python
+# ❌ ERRADO (estava assim):
+cloudinary_url = config('CLOUDINARY_URL')
+cloudinary.config(cloudinary_url=cloudinary_url)  # Não funciona!
+```
 
-**1. SSH no Hostinger:**
+**Correção aplicada:**
+```python
+# ✅ CORRETO (corrigido):
+import os
+os.environ['CLOUDINARY_URL'] = config('CLOUDINARY_URL')
+cloudinary.config()  # Lê automaticamente de os.environ
+```
+
+O método `cloudinary.config()` **não aceita** o parâmetro `cloudinary_url`!  
+Ele precisa ler de `os.environ['CLOUDINARY_URL']` ou receber parâmetros individuais.
+
+**Resultado:** Mesmo com variável no .env, Django salvava localmente porque a configuração estava ERRADA!
+
+**Consequências:**
+1. Imagens salvavam em `/media/` local (que não existe no container)
+2. URLs retornavam `http://72.61.55.172:8000/media/...` (quebrado)
+3. Admin tentava renderizar thumbnails de 100+ imagens quebradas
+4. Cada imagem demorava 30s+ para timeout
+5. Worker morria após 300s (5 minutos)
+
+---
+
+### 🔧 Solução APLICADA:
+
+**✅ CORREÇÃO JÁ FEITA NO CÓDIGO LOCAL** (`settings.py` corrigido!)
+
+**Próximos passos - Deploy do código corrigido:**
+
+**Próximos passos - Deploy do código corrigido:**
+
+**1. Fazer commit e push do código corrigido:**
+```bash
+# No seu PC (Windows):
+git add .
+git commit -m "fix: Corrige configuração do Cloudinary no settings.py"
+git push origin main
+```
+
+**2. No Hostinger, atualizar o código e redesploy:**
 ```bash
 ssh seu_usuario@72.61.55.172
 ```
 
-**2. Adicionar variável de ambiente:**
+**2. No Hostinger, atualizar o código e redesploy:**
+
 ```bash
-# Editar .env no servidor
+# Via SSH:
+ssh seu_usuario@72.61.55.172
 cd /caminho/do/projeto
-echo 'CLOUDINARY_URL=cloudinary://577511264787832:jxis6sQppAtWfpA35ttwyl4yxNQ@dphpzghkh' >> .env
+
+# Puxar código atualizado do GitHub
+git pull origin main
+
+# Verificar se o settings.py foi atualizado:
+grep -A 3 "os.environ\['CLOUDINARY_URL'\]" voz_do_povo/settings.py
+# Deve mostrar a linha corrigida
+
+# Redesploy do container com código atualizado:
+docker-compose down
+docker-compose up -d --build
 ```
 
-**OU via Painel Hostinger:**
-- Vá em **Gerenciador Docker** → **voz-do-povo-api**
-- Clique em **Variáveis de Ambiente**
-- Adicione:
+**OU via Painel Hostinger (se usar deploy automático do GitHub):**
+1. **Gerenciador Docker** → **voz-do-povo-api**
+2. Clique em **"Parar"**
+3. Clique em **"Atualizar"** ou **"Pull"** (puxa código do GitHub)
+4. Clique em **"Reconstruir"** (Rebuild)
+5. Clique em **"Iniciar"**
+
+**3. Confirmar que CLOUDINARY_URL está no .env:**
   ```
   CLOUDINARY_URL=cloudinary://577511264787832:jxis6sQppAtWfpA35ttwyl4yxNQ@dphpzghkh
   ```
 
-**3. Redesploy do container:**
+**3. Redesploy OBRIGATÓRIO do container:**
+
+⚠️ **IMPORTANTE:** Apenas adicionar `CLOUDINARY_URL` no .env NÃO é suficiente!  
+O container precisa ser **reconstruído e reiniciado** para ler a nova variável.
+
 ```bash
+# Via SSH no Hostinger:
+cd /caminho/do/projeto
+
+# Parar container atual
 docker-compose down
+
+# Reconstruir imagem E reiniciar (força rebuild)
 docker-compose up -d --build
+
+# OU mais agressivo (remove tudo e reconstrói do zero):
+docker-compose down -v
+docker rmi voz-api_web  # Remove imagem antiga
+docker-compose build --no-cache
+docker-compose up -d
 ```
+
+**Via Painel Hostinger:**
+1. **Gerenciador Docker** → **voz-do-povo-api**
+2. Clique em **"Parar"** (Stop)
+3. Clique em **"Reconstruir"** (Rebuild) - MUITO IMPORTANTE!
+4. Clique em **"Iniciar"** (Start)
 
 **4. Rodar migrações (se necessário):**
 ```bash
 docker exec -it voz-do-povo-api python manage.py migrate
 ```
 
-**5. Verificar logs:**
+**5. VERIFICAR se Cloudinary foi carregado:**
 ```bash
-docker logs voz-do-povo-api --tail 100 -f
+# Ver logs do container
+docker logs voz-do-povo-api --tail 100
+
+# Deve aparecer algo como:
+# "Cloudinary configuration: cloud_name='dphpzghkh'"
 ```
 
-### Como confirmar que resolveu:
+---
 
-✅ **Logs devem mostrar:**
-```
-Cloudinary configuration: cloud_name='dphpzghkh'
+### ✅ Como confirmar que resolveu:
+
+**1. Verificar logs do container:**
+```bash
+docker logs voz-do-povo-api --tail 100 | grep -i cloudinary
+
+# Deve aparecer:
+# Cloudinary configuration: cloud_name='dphpzghkh'
 ```
 
-✅ **Criar denúncia via API:**
+**2. Criar denúncia via API e VERIFICAR A URL DA FOTO:**
 ```bash
 curl -X POST http://72.61.55.172:8000/api/denuncias/denuncias/ \
   -F "foto=@teste.jpg" \
-  -F "titulo=Teste" \
+  -F "titulo=Teste Cloudinary" \
   -F "descricao=Teste" \
   -F "categoria=1" \
   -F "cidade=4493" \
@@ -500,14 +585,35 @@ curl -X POST http://72.61.55.172:8000/api/denuncias/denuncias/ \
   -F "autor_convidado=Teste"
 ```
 
-**Resposta DEVE ter:**
+**✅ RESPOSTA CORRETA (com Cloudinary ativo):**
 ```json
 {
-  "foto": "https://res.cloudinary.com/dphpzghkh/image/upload/v.../denuncias_fotos/foto.jpg"
+  "foto": "https://res.cloudinary.com/dphpzghkh/image/upload/v1732123456/denuncias_fotos/foto.jpg"
 }
 ```
 
-✅ **Admin deve carregar em <3 segundos** (sem timeout)
+**❌ RESPOSTA ERRADA (Cloudinary NÃO ativo - como está agora):**
+```json
+{
+  "foto": "http://72.61.55.172:8000/media/denuncias_fotos/foto.jpg"
+}
+```
+
+**Se ainda retornar URL local, significa que:**
+- Container não foi reconstruído (faltou `docker-compose up -d --build`)
+- Variável CLOUDINARY_URL não foi lida pelo Django
+- Necessário rebuild mais agressivo: `docker-compose down -v && docker-compose build --no-cache && docker-compose up -d`
+
+**3. Teste pelo Flutter - veja o log da resposta:**
+```dart
+// ✅ CORRETO (Cloudinary ativo):
+I/flutter: foto: https://res.cloudinary.com/dphpzghkh/...
+
+// ❌ ERRADO (Cloudinary NÃO ativo - situação atual):
+I/flutter: foto: http://72.61.55.172:8000/media/...
+```
+
+**4. Admin deve carregar em <3 segundos** (sem WORKER TIMEOUT)
 
 ---
 
