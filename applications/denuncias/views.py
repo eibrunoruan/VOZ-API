@@ -2,10 +2,17 @@ from rest_framework import viewsets, permissions, mixins, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from django.db.models import Count, Prefetch
 
 from applications.gestao_publica.permissions import IsGestorWithJurisdiction
 from .models import Categoria, Denuncia, ApoioDenuncia, Comentario
-from .serializers import CategoriaSerializer, DenunciaSerializer, ApoioDenunciaSerializer, ComentarioSerializer
+from .serializers import (
+    CategoriaSerializer, 
+    DenunciaSerializer, 
+    DenunciaListSerializer,
+    ApoioDenunciaSerializer, 
+    ComentarioSerializer
+)
 from .services import criar_ou_apoiar_denuncia
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -29,13 +36,16 @@ class CategoriaViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
 class DenunciaViewSet(viewsets.ModelViewSet):
-    queryset = Denuncia.objects.all().select_related(
-        'autor', 'categoria', 'cidade', 'estado'
-    ).prefetch_related('apoios', 'comentarios')
     serializer_class = DenunciaSerializer
-
+    
     def get_queryset(self):
-        queryset = super().get_queryset()
+        # Otimização: select_related para ForeignKeys, prefetch_related para ManyToMany
+        # annotate para contar apoios em uma única query
+        queryset = Denuncia.objects.select_related(
+            'autor', 'categoria', 'cidade', 'estado'
+        ).annotate(
+            total_apoios=Count('apoios')  # Conta apoios em 1 query ao invés de N queries
+        )
         
         # Filtro para "Minhas Denúncias" - apenas denúncias do usuário autenticado
         minhas = self.request.query_params.get('minhas', None)
@@ -55,6 +65,12 @@ class DenunciaViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(categoria_id=categoria_param)
         
         return queryset
+    
+    def get_serializer_class(self):
+        # Usa serializer leve para listagem, completo para detalhes
+        if self.action == 'list':
+            return DenunciaListSerializer
+        return DenunciaSerializer
 
     def get_permissions(self):
         if self.action in ['update', 'partial_update', 'destroy']:
@@ -120,10 +136,27 @@ class DenunciaViewSet(viewsets.ModelViewSet):
         
         denuncia = self.get_object()
         
+        # Validação de permissão: usuário autenticado OU guest com mesmo nome
         if request.user.is_authenticated:
+            # Usuário autenticado: verificar se é o autor
             if denuncia.autor != request.user:
                 return Response(
                     {'detail': 'Apenas o autor pode deletar sua própria denúncia.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        else:
+            # Guest user: verificar se forneceu autor_convidado e se bate
+            autor_convidado_request = request.data.get('autor_convidado')
+            
+            if not autor_convidado_request:
+                return Response(
+                    {'detail': 'É necessário fornecer "autor_convidado" para deletar denúncias como convidado.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if denuncia.autor_convidado != autor_convidado_request:
+                return Response(
+                    {'detail': 'Apenas o autor convidado pode deletar sua própria denúncia.'},
                     status=status.HTTP_403_FORBIDDEN
                 )
         
@@ -225,10 +258,10 @@ class DenunciaViewSet(viewsets.ModelViewSet):
         
         page = self.paginate_queryset(queryset)
         if page is not None:
-            serializer = self.get_serializer(page, many=True)
+            serializer = DenunciaListSerializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         
-        serializer = self.get_serializer(queryset, many=True)
+        serializer = DenunciaListSerializer(queryset, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])

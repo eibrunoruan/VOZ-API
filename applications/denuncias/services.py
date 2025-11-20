@@ -32,10 +32,20 @@ def criar_ou_apoiar_denuncia(validated_data, user=None, autor_convidado=None):
     logger.info(f"   Usuário: {user.username if user else autor_convidado}")
 
     with transaction.atomic():
+        # Otimização: filtro geográfico aproximado (bounding box)
+        # 100m ≈ 0.001 graus (aproximado)
+        lat_delta = 0.001
+        lon_delta = 0.001
+        
         denuncias_candidatas = Denuncia.objects.filter(
             categoria=categoria,
-            status__in=[Denuncia.Status.ABERTA, Denuncia.Status.EM_ANALISE]
-        ).order_by('-data_criacao')
+            status__in=[Denuncia.Status.ABERTA, Denuncia.Status.EM_ANALISE],
+            # Bounding box: reduz drasticamente candidatos antes do haversine
+            latitude__gte=float(new_lat) - lat_delta,
+            latitude__lte=float(new_lat) + lat_delta,
+            longitude__gte=float(new_lon) - lon_delta,
+            longitude__lte=float(new_lon) + lon_delta,
+        ).only('id', 'latitude', 'longitude', 'titulo').order_by('-data_criacao')[:50]  # Limita a 50
 
         logger.info(f"🔍 Buscando denúncias similares:")
         logger.info(f"   Raio: {SEARCH_RADIUS_METERS}m")

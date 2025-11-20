@@ -38,7 +38,15 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,  # 20 denúncias por página (otimiza carregamento)
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ] if not DEBUG else [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
 }
 
 MIDDLEWARE = [
@@ -83,6 +91,7 @@ DATABASES = {
         'OPTIONS': {
             'sslmode': 'require',
         } if config('DB_ENGINE', default='') == 'django.db.backends.postgresql' else {},
+        'CONN_MAX_AGE': 600,  # Mantém conexões abertas por 10 minutos (reduz overhead)
     }
 }
 

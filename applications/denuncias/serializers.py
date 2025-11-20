@@ -7,22 +7,54 @@ class CategoriaSerializer(serializers.ModelSerializer):
         model = Categoria
         fields = '__all__'
 
-class DenunciaSerializer(serializers.ModelSerializer):
-    autor = UserSerializer(read_only=True, required=False)
-    total_apoios = serializers.SerializerMethodField()
-    autor_convidado = serializers.CharField(max_length=150, required=False, allow_blank=True)
+class DenunciaListSerializer(serializers.ModelSerializer):
+    """
+    Serializer otimizado para listagem de denúncias.
+    Não inclui objetos nested pesados, apenas IDs e nomes.
+    """
+    total_apoios = serializers.IntegerField(read_only=True)  # Vem do annotate
+    categoria_nome = serializers.CharField(source='categoria.nome', read_only=True)
+    cidade_nome = serializers.CharField(source='cidade.nome', read_only=True)
+    estado_nome = serializers.CharField(source='estado.nome', read_only=True)
+    estado_sigla = serializers.CharField(source='estado.sigla', read_only=True)
+    autor_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = Denuncia
         fields = [
-            'id', 'titulo', 'descricao', 'autor', 'autor_convidado', 'categoria', 'cidade', 'estado',
-            'foto', 'endereco', 'latitude', 'longitude', 'jurisdicao', 'status',
+            'id', 'titulo', 'descricao', 'autor_nome', 'autor_convidado',
+            'categoria', 'categoria_nome', 'cidade', 'cidade_nome',
+            'estado', 'estado_nome', 'estado_sigla',
+            'foto', 'endereco', 'latitude', 'longitude',
+            'jurisdicao', 'status', 'data_criacao', 'total_apoios'
+        ]
+    
+    def get_autor_nome(self, obj):
+        if obj.autor:
+            return obj.autor.get_full_name() or obj.autor.email
+        return obj.autor_convidado or 'Anônimo'
+
+class DenunciaSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo para detalhes de denúncia (create, update, retrieve).
+    """
+    autor = UserSerializer(read_only=True, required=False)
+    total_apoios = serializers.IntegerField(read_only=True, default=0)  # Vem do annotate
+    autor_convidado = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    categoria_nome = serializers.CharField(source='categoria.nome', read_only=True)
+    cidade_nome = serializers.CharField(source='cidade.nome', read_only=True)
+    estado_nome = serializers.CharField(source='estado.nome', read_only=True)
+
+    class Meta:
+        model = Denuncia
+        fields = [
+            'id', 'titulo', 'descricao', 'autor', 'autor_convidado',
+            'categoria', 'categoria_nome', 'cidade', 'cidade_nome',
+            'estado', 'estado_nome', 'foto', 'endereco',
+            'latitude', 'longitude', 'jurisdicao', 'status',
             'data_criacao', 'total_apoios'
         ]
-        read_only_fields = ('autor', 'data_criacao')
-
-    def get_total_apoios(self, obj):
-        return obj.apoios.count()
+        read_only_fields = ('autor', 'data_criacao', 'total_apoios')
 
     def validate(self, data):
         user = self.context['request'].user

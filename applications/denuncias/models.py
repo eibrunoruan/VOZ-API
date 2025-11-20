@@ -56,6 +56,14 @@ class Denuncia(models.Model):
         verbose_name = _('Denúncia')
         verbose_name_plural = _('Denúncias')
         ordering = ['-data_criacao']
+        indexes = [
+            models.Index(fields=['-data_criacao']),  # Ordena por data (mais recentes)
+            models.Index(fields=['status']),  # Filtra por status
+            models.Index(fields=['categoria']),  # Filtra por categoria
+            models.Index(fields=['cidade']),  # Filtra por cidade
+            models.Index(fields=['autor', '-data_criacao']),  # Minhas denúncias
+            models.Index(fields=['latitude', 'longitude']),  # Busca geográfica
+        ]
 
     def __str__(self):
         return self.titulo
