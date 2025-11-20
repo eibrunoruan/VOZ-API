@@ -37,6 +37,15 @@ class DenunciaViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         
+        # Filtro para "Minhas Denúncias" - apenas denúncias do usuário autenticado
+        minhas = self.request.query_params.get('minhas', None)
+        if minhas and minhas.lower() in ['true', '1', 'yes']:
+            if self.request.user.is_authenticated:
+                queryset = queryset.filter(autor=self.request.user)
+            else:
+                # Se não autenticado, retorna queryset vazio
+                queryset = queryset.none()
+        
         status_param = self.request.query_params.get('status', None)
         if status_param:
             queryset = queryset.filter(status=status_param)
@@ -196,6 +205,31 @@ class DenunciaViewSet(viewsets.ModelViewSet):
                         )
         
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def minhas_denuncias(self, request):
+        """
+        Endpoint dedicado para listar apenas as denúncias do usuário autenticado.
+        GET /api/denuncias/denuncias/minhas_denuncias/
+        """
+        queryset = self.get_queryset().filter(autor=request.user)
+        
+        # Aplicar os mesmos filtros disponíveis
+        status_param = request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        
+        categoria_param = request.query_params.get('categoria', None)
+        if categoria_param:
+            queryset = queryset.filter(categoria_id=categoria_param)
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def resolver(self, request, pk=None):
