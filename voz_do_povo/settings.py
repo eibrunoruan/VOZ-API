@@ -1,6 +1,7 @@
 
 from pathlib import Path
 from decouple import config, Csv
+import cloudinary
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -18,11 +19,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    'cloudinary_storage',
-    'cloudinary',
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'cloudinary_storage',
+    'cloudinary',
 
     'applications.core',
     'applications.autenticacao',
@@ -112,7 +113,9 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-CLOUDINARY_URL = config('CLOUDINARY_URL')
+cloudinary_url = config('CLOUDINARY_URL')
+cloudinary.config(cloudinary_url=cloudinary_url)
+
 MEDIA_URL = '/media/'
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
