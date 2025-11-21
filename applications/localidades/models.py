@@ -7,6 +7,7 @@ class Estado(models.Model):
     class Meta:
         verbose_name = 'Estado'
         verbose_name_plural = 'Estados'
+        ordering = ['nome']  # Evita warnings de paginação
 
     def __str__(self):
         return self.nome
