@@ -61,14 +61,18 @@ class DenunciaSerializer(serializers.ModelSerializer):
         user = request.user if request else None
         autor_convidado = data.get('autor_convidado')
 
+        # Usuário autenticado: não pode fornecer nome de convidado
         if user and user.is_authenticated:
             if autor_convidado:
                 raise serializers.ValidationError('Usuários autenticados não devem fornecer um nome de convidado.')
             return data
         
-        if not autor_convidado:
-            raise serializers.ValidationError('É necessário fornecer um nome de convidado para usuários não autenticados.')
-            
+        # Usuário não autenticado (guest): DEVE fornecer nome de convidado
+        if not user or not user.is_authenticated:
+            if not autor_convidado or autor_convidado.strip() == '':
+                raise serializers.ValidationError('Usuários não autenticados devem fornecer um nome de convidado.')
+            return data
+        
         return data
 
 class ApoioDenunciaSerializer(serializers.ModelSerializer):
