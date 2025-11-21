@@ -57,10 +57,11 @@ class DenunciaSerializer(serializers.ModelSerializer):
         read_only_fields = ('autor', 'data_criacao', 'total_apoios')
 
     def validate(self, data):
-        user = self.context['request'].user
+        request = self.context.get('request')
+        user = request.user if request else None
         autor_convidado = data.get('autor_convidado')
 
-        if user.is_authenticated:
+        if user and user.is_authenticated:
             if autor_convidado:
                 raise serializers.ValidationError('Usuários autenticados não devem fornecer um nome de convidado.')
             return data
