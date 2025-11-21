@@ -4,15 +4,26 @@ from django.views.decorators.csrf import csrf_exempt
 from applications.denuncias.models import Denuncia, Categoria
 from applications.localidades.models import Estado, Cidade
 from applications.core.models import User
+from django.conf import settings
 import time
+import cloudinary
 
 @csrf_exempt
 @require_http_methods(["GET"])
 def health_check(request):
+    # Verificar se Cloudinary está configurado
+    cloudinary_config = cloudinary.config()
+    cloudinary_status = {
+        "configured": bool(cloudinary_config.cloud_name),
+        "cloud_name": cloudinary_config.cloud_name or "NOT_CONFIGURED",
+        "storage_backend": settings.DEFAULT_FILE_STORAGE
+    }
+    
     return JsonResponse({
         "status": "ok",
         "message": "API is running",
-        "timestamp": time.time()
+        "timestamp": time.time(),
+        "cloudinary": cloudinary_status
     })
 
 @csrf_exempt
