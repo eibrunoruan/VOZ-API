@@ -1,0 +1,57 @@
+# ========================================
+# COMANDOS SSH - HOSTINGER
+# ========================================
+# Execute estes comandos NO SERVIDOR via SSH
+# ========================================
+
+# 1. Conectar via SSH
+ssh usuario@72.61.55.172
+
+# 2. Navegar até pasta do projeto
+cd /caminho/do/projeto  # Exemplo: cd /home/usuario/VOZ-API
+
+# 3. Parar container
+docker-compose down
+
+# 4. FORÇAR pull do GitHub (MUITO IMPORTANTE!)
+git fetch origin main
+git reset --hard origin/main
+git pull origin main
+
+# 5. Verificar se settings.py foi atualizado
+cat voz_do_povo/settings.py | grep "cloudinary.config"
+# DEVE aparecer: cloudinary.config(cloud_name=..., api_key=..., api_secret=...)
+
+# 6. Rebuild completo (sem cache)
+docker-compose build --no-cache
+
+# 7. Subir container
+docker-compose up -d
+
+# 8. Ver logs em tempo real
+docker logs voz-do-povo-api --tail 100 -f
+
+# 9. Verificar se Cloudinary está ativo
+curl http://localhost:8000/api/health/ | jq .cloudinary
+
+# DEVE RETORNAR:
+# {
+#   "configured": true,
+#   "cloud_name": "dphpzghkh",
+#   "storage_backend": "cloudinary_storage.storage.MediaCloudinaryStorage"
+# }
+
+# ========================================
+# SE NÃO FUNCIONAR - Rebuild agressivo:
+# ========================================
+docker-compose down -v
+docker system prune -a --volumes -f
+docker-compose build --no-cache --pull
+docker-compose up -d
+
+# ========================================
+# VERIFICAÇÃO FINAL
+# ========================================
+# Criar denúncia e verificar URL da foto:
+# DEVE SER: https://res.cloudinary.com/dphpzghkh/...
+# NÃO PODE SER: http://72.61.55.172:8000/media/...
