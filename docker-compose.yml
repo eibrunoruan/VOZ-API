@@ -2,7 +2,7 @@ services:
   web:
     build: .
     container_name: voz-do-povo-api
-    command: gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 300 --graceful-timeout 300 voz_do_povo.wsgi:application
+    command: gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 300 --graceful-timeout 300 --log-level info --access-logfile - --error-logfile - voz_do_povo.wsgi:application
     volumes:
       - static_volume:/app/staticfiles
     ports:
