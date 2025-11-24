@@ -1,0 +1,510 @@
+================================================================================
+RELATÓRIO DE BUG: BACKEND DJANGO FUNCIONANDO - PROBLEMA NO FLUTTER
+================================================================================
+
+Data: 24 de Novembro de 2025
+Backend: Django 5.2.8 + DRF + Cloudinary + Gunicorn
+Desenvolvedor Backend: Bruno Santos
+Desenvolvedor Flutter: [A ser enviado]
+
+================================================================================
+RESUMO EXECUTIVO
+================================================================================
+
+Após 3 dias de debugging extensivo (21-24 Nov 2025), confirmamos que o backend
+Django está 100% funcional e enviando imagens para o Cloudinary CDN com sucesso.
+
+Testes realizados no backend:
+✅ Django Shell com PIL Image → Status 201, Cloudinary URL válida
+✅ RequestFactory simulando Flutter → Status 201, Cloudinary URL válida  
+✅ Storage Backend verificado → MediaCloudinaryStorage
+✅ Cloudinary API → Resposta 200 em todos os uploads
+
+Resultado do Flutter app:
+❌ POST /api/denuncias/denuncias/ → Status 500
+
+ATUALIZAÇÃO CRÍTICA (24/Nov/2025 - 01:30):
+================================================================================
+❌ DIAGNÓSTICO ANTERIOR ESTAVA INCORRETO!
+
+Após análise dos logs completos do Flutter, confirmamos que o Flutter está 
+enviando TODOS os dados corretamente:
+
+✅ autor_convidado: "okok" presente no FormData
+✅ Todos os campos obrigatórios enviados
+✅ Foto comprimida válida (13.61 KB JPEG)
+✅ ContentType correto (image/jpeg)
+✅ Tamanho de arquivo válido (13933 bytes)
+
+NOVA CONCLUSÃO: O problema está NO BACKEND DJANGO processando requisições HTTP 
+multipart/form-data reais, não no Flutter!
+
+Os testes via Django Shell e RequestFactory funcionaram, mas requisições HTTP 
+reais do Flutter retornam 500. Isso indica problema no ViewSet/Serializer ao 
+processar multipart data de requisições HTTP externas.
+
+================================================================================
+EVIDÊNCIAS - TESTES DO BACKEND
+================================================================================
+
+1. TESTE VIA DJANGO SHELL (Criação Direta)
+------------------------------------------
+Comando executado no container voz-do-povo-api:
+
+python manage.py shell
+
+from PIL import Image
+from io import BytesIO
+from django.core.files.uploadedfile import InMemoryUploadedFile
+from applications.denuncias.models import Denuncia, Categoria
+
+# Criar imagem de teste
+img = Image.new('RGB', (100, 100), color='red')
+img_io = BytesIO()
+img.save(img_io, format='JPEG')
+img_io.seek(0)
+
+foto = InMemoryUploadedFile(
+    img_io, None, 'test_real.jpg', 'image/jpeg',
+    img_io.getbuffer().nbytes, None
+)
+
+categoria = Categoria.objects.first()
+denuncia = Denuncia.objects.create(
+    titulo='Teste Cloudinary REAL',
+    descricao='Teste via shell',
+    categoria=categoria,
+    latitude=-22.9068,
+    longitude=-43.1729,
+    autor_convidado='Bruno Teste',
+    foto=foto
+)
+
+RESULTADO:
+✅ Denúncia criada! ID: 21
+✅ Título: Teste Cloudinary REAL
+✅ Foto URL: https://res.cloudinary.com/dphpzghkh/image/upload/v1/media/denuncias_fotos/test_real_bddtis
+✅ Cloudinary API: POST /v1_1/dphpzghkh/image/upload HTTP/1.1" 200
+
+2. TESTE VIA REQUESTFACTORY (Simulação do Flutter)
+---------------------------------------------------
+Código executado no Django shell simulando EXATAMENTE a requisição do Flutter:
+
+from django.test import RequestFactory
+from django.contrib.auth.models import AnonymousUser
+from applications.denuncias.views import DenunciaViewSet
+from PIL import Image
+from io import BytesIO
+
+factory = RequestFactory()
+img = Image.new('RGB', (100, 100), color='blue')
+img_io = BytesIO()
+img.save(img_io, format='JPEG')
+img_io.seek(0)
+
+# Criar FormData exatamente como o Flutter envia
+request = factory.post(
+    '/api/denuncias/denuncias/',
+    data={
+        'titulo': 'Teste Flutter Simulation',
+        'descricao': 'Simulando requisição do Flutter app',
+        'categoria': '1',
+        'latitude': '-22.9068',
+        'longitude': '-43.1729',
+        'autor_convidado': 'João Guest',
+        'foto': img_io
+    },
+    format='multipart'
+)
+request.user = AnonymousUser()
+
+view = DenunciaViewSet.as_view({'post': 'create'})
+response = view(request)
+
+RESULTADO:
+✅ Status: 201 CREATED
+✅ Denúncia ID: 22
+✅ Foto URL: https://res.cloudinary.com/dphpzghkh/image/upload/v1/media/denuncias_fotos/compressed_test_xpsyh8
+✅ Autor convidado: João Guest
+✅ Cloudinary upload: SUCESSO
+
+3. VERIFICAÇÃO DO STORAGE BACKEND
+----------------------------------
+Comando:
+python manage.py shell -c "from django.core.files.storage import default_storage; print('Storage:', default_storage.__class__.__name__)"
+
+RESULTADO:
+✅ Storage: MediaCloudinaryStorage
+
+4. LOGS DO FLUTTER APP (Produção)
+----------------------------------
+Log do servidor ao receber requisição do Flutter:
+
+187.103.107.79 - - [24/Nov/2025:00:12:18 +0000] "POST /api/denuncias/denuncias/ HTTP/1.1" 500 145 "-" "Dart/3.9 (dart:io)"
+
+❌ Status 500 (Internal Server Error)
+❌ User-Agent: Dart/3.9 (dart:io)
+
+LOGS COMPLETOS DO FLUTTER (24/Nov/2025 - 01:30):
+------------------------------------------------
+✅ Foto comprimida: 13.61 KB (redução de 10.5%)
+✅ Localização identificada: São Paulo/SP (ID: 5275)
+✅ Estado de autenticação: guest, nickname "okok"
+✅ FormData com 10 campos + foto:
+   - titulo: "dasfasf"
+   - descricao: "safasfasf"
+   - categoria: "6"
+   - cidade: "5275"
+   - estado: "25"
+   - latitude: "-23.549241"
+   - longitude: "-46.631583"
+   - jurisdicao: "MUNICIPAL"
+   - endereco: "R. Venceslau Brás, Centro Histórico de São Paulo - São Paulo"
+   - autor_convidado: "okok" ✅ PRESENTE E VÁLIDO!
+   - foto: 13933 bytes, image/jpeg ✅
+
+POST http://72.61.55.172:8000/api/denuncias/denuncias/
+RESPONSE: 500 Internal Server Error
+BODY: <!doctype html><html><h1>Server Error (500)</h1></html>
+
+🎯 CONCLUSÃO ATUALIZADA: Flutter está enviando TUDO CORRETO. O problema é no 
+Django ao processar requisições HTTP multipart reais (não simuladas).
+
+================================================================================
+FORMATO CORRETO DA REQUISIÇÃO (ESPERADO PELO BACKEND)
+================================================================================
+
+Endpoint: POST /api/denuncias/denuncias/
+Content-Type: multipart/form-data
+
+CAMPOS OBRIGATÓRIOS (FormData):
+
+Para USUÁRIOS CONVIDADOS (não autenticados):
+- titulo: string (não vazio)
+- descricao: string (não vazio)
+- categoria: integer (ID válido de categoria)
+- latitude: float/string (coordenada)
+- longitude: float/string (coordenada)
+- autor_convidado: string (OBRIGATÓRIO para guests, não pode ser vazio)
+- foto: file (JPEG/PNG, max 10MB recomendado)
+
+Para USUÁRIOS AUTENTICADOS:
+- titulo: string (não vazio)
+- descricao: string (não vazio)
+- categoria: integer (ID válido de categoria)
+- latitude: float/string (coordenada)
+- longitude: float/string (coordenada)
+- foto: file (JPEG/PNG, max 10MB recomendado)
+- autor_convidado: NÃO ENVIAR (causará ValidationError)
+
+Headers necessários:
+- Content-Type: multipart/form-data; boundary=<boundary>
+- Authorization: Bearer <token> (apenas para usuários autenticados)
+
+================================================================================
+POSSÍVEIS CAUSAS DO PROBLEMA NO BACKEND DJANGO
+================================================================================
+
+❌ FLUTTER NÃO É O PROBLEMA! Logs confirmam que Flutter envia tudo corretamente.
+
+CAUSAS PROVÁVEIS NO DJANGO:
+
+1. CAMPOS EXTRAS NÃO DECLARADOS NO SERIALIZER
+   - Flutter envia: cidade, estado, jurisdicao, endereco
+   - Serializer pode não ter esses campos declarados
+   - Django rejeita campos não reconhecidos em modo strict
+   - Solução: Adicionar campos no DenunciaSerializer ou usar extra_kwargs
+
+2. VALIDAÇÃO DO SERIALIZER FALHANDO
+   - Método validate() pode estar lançando exceção não capturada
+   - Validação de autor_convidado pode ter bug com multipart data
+   - Solução: Adicionar try-except no validate() com logging
+
+3. MODEL SAVE() FALHANDO
+   - Campos obrigatórios do modelo não estão sendo preenchidos
+   - ForeignKey (categoria, cidade, estado) podem ter constraint errors
+   - Solução: Verificar integridade referencial no banco
+
+4. MIDDLEWARE OU PERMISSÃO BLOQUEANDO
+   - AllowAny pode não estar aplicado corretamente
+   - CORS ou CSRF middleware podem estar rejeitando
+   - Solução: Verificar settings.py e permission_classes
+
+5. CLOUDINARY TIMEOUT NA REQUISIÇÃO HTTP REAL
+   - Upload funciona em shell mas falha em produção
+   - Gunicorn pode estar matando a requisição
+   - Solução: Aumentar timeout do Gunicorn ou fazer upload assíncrono
+
+6. PROBLEMA COM MULTIPART PARSER
+   - Django pode não estar parseando multipart/form-data corretamente
+   - Boundary ou encoding podem estar incorretos
+   - Solução: Verificar parser_classes no ViewSet
+
+================================================================================
+CÓDIGO FLUTTER ESPERADO (EXEMPLO COM DIO)
+================================================================================
+
+import 'package:dio/dio.dart';
+
+Future<void> criarDenuncia() async {
+  final dio = Dio();
+  
+  // ADICIONAR LOGS ANTES DO UPLOAD
+  print('📤 Iniciando upload de denúncia...');
+  print('Título: ${tituloController.text}');
+  print('Categoria ID: $categoriaId');
+  print('Autor convidado: ${autorConvidadoController.text}');
+  print('Foto path: ${fotoFile.path}');
+  print('Foto tamanho: ${await fotoFile.length()} bytes');
+  
+  FormData formData = FormData.fromMap({
+    'titulo': tituloController.text.trim(),
+    'descricao': descricaoController.text.trim(),
+    'categoria': categoriaId.toString(), // Garantir string/int
+    'latitude': latitude.toString(),
+    'longitude': longitude.toString(),
+    'autor_convidado': autorConvidadoController.text.trim(), // OBRIGATÓRIO!
+    'foto': await MultipartFile.fromFile(
+      fotoFile.path,
+      filename: 'denuncia_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      contentType: MediaType('image', 'jpeg'), // Especificar tipo
+    ),
+  });
+  
+  try {
+    print('📡 Enviando requisição...');
+    final response = await dio.post(
+      'https://72.61.55.172/api/denuncias/denuncias/',
+      data: formData,
+      options: Options(
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          // 'Authorization': 'Bearer $token', // Se autenticado
+        },
+        sendTimeout: Duration(seconds: 60), // Timeout maior
+        receiveTimeout: Duration(seconds: 60),
+      ),
+    );
+    
+    print('✅ Resposta: ${response.statusCode}');
+    print('📦 Dados: ${response.data}');
+    
+  } catch (e) {
+    print('❌ Erro: $e');
+    if (e is DioException) {
+      print('Status: ${e.response?.statusCode}');
+      print('Data: ${e.response?.data}');
+      print('Headers: ${e.response?.headers}');
+    }
+  }
+}
+
+================================================================================
+DEBUGGING NO BACKEND DJANGO - CHECKLIST URGENTE
+================================================================================
+
+[✅] 1. FLUTTER ESTÁ ENVIANDO TUDO CORRETO - Confirmado pelos logs
+       - autor_convidado: "okok" ✅
+       - Foto: 13.61 KB JPEG válido ✅
+       - Todos os campos presentes ✅
+
+[❌] 2. EXECUTAR TESTE DIAGNÓSTICO NO VPS (URGENTE!)
+       SSH: ssh root@72.61.55.172
+       Container: docker exec -it voz-do-povo-api bash
+       
+       Executar no Django shell:
+       
+       python manage.py shell
+       
+       # Copiar e colar este código:
+       from django.test import RequestFactory
+       from applications.denuncias.views import DenunciaViewSet
+       from PIL import Image
+       from io import BytesIO
+       import traceback
+       from django.contrib.auth.models import AnonymousUser
+       
+       factory = RequestFactory()
+       img = Image.new('RGB', (100, 100), color='red')
+       img_io = BytesIO()
+       img.save(img_io, format='JPEG')
+       img_io.seek(0)
+       img_io.name = 'test.jpg'
+       
+       # Dados EXATAMENTE como Flutter envia
+       post_data = {
+           'titulo': 'dasfasf',
+           'descricao': 'safasfasf',
+           'categoria': '6',
+           'cidade': '5275',
+           'estado': '25',
+           'latitude': '-23.549241',
+           'longitude': '-46.631583',
+           'jurisdicao': 'MUNICIPAL',
+           'endereco': 'R. Venceslau Brás, Centro Histórico de São Paulo - São Paulo',
+           'autor_convidado': 'okok',
+           'foto': img_io
+       }
+       
+       try:
+           request = factory.post('/api/denuncias/denuncias/', data=post_data, format='multipart')
+           request.user = AnonymousUser()
+           
+           view = DenunciaViewSet.as_view({'post': 'create'})
+           response = view(request)
+           
+           print(f"Status: {response.status_code}")
+           print(f"Data: {response.data}")
+       except Exception as e:
+           print(f"ERRO: {type(e).__name__}: {e}")
+           traceback.print_exc()
+
+[ ] 3. VERIFICAR SERIALIZER - applications/denuncias/serializers.py
+       - Campos cidade, estado, jurisdicao, endereco estão declarados?
+       - Meta.fields inclui todos os campos que Flutter envia?
+       - Há validação extra que pode estar falhando?
+
+[ ] 4. VERIFICAR MODEL - applications/denuncias/models.py
+       - Campos cidade, estado são ForeignKey ou CharField?
+       - Constraints de NOT NULL podem estar falhando?
+       - Signal pre_save/post_save pode estar causando erro?
+
+[ ] 5. ATIVAR DEBUG MODE REAL NO CONTAINER
+       docker exec -it voz-do-povo-api bash
+       echo "DEBUG=True" >> /app/.env
+       docker restart voz-do-povo-api
+       docker logs -f voz-do-povo-api
+       
+       Tentar criar denúncia pelo Flutter novamente e ver traceback
+
+[ ] 6. VERIFICAR GUNICORN TIMEOUT
+       - Timeout atual: 300s
+       - Upload Cloudinary pode estar demorando?
+       - Solução: Verificar logs do Cloudinary API
+
+[ ] 7. TESTAR COM CURL DIRETO NO VPS
+       curl -X POST http://localhost:8000/api/denuncias/denuncias/ \
+         -F "titulo=Teste Curl" \
+         -F "descricao=Teste" \
+         -F "categoria=6" \
+         -F "cidade=5275" \
+         -F "estado=25" \
+         -F "latitude=-23.549241" \
+         -F "longitude=-46.631583" \
+         -F "jurisdicao=MUNICIPAL" \
+         -F "endereco=Teste" \
+         -F "autor_convidado=Curl Test" \
+         -F "foto=@/tmp/test.jpg" \
+         -v
+
+[ ] 8. VERIFICAR LOGS DO GUNICORN EM TEMPO REAL
+       docker logs -f voz-do-povo-api
+       
+       Procurar por:
+       - Traceback do Python
+       - ValidationError
+       - IntegrityError
+       - CloudinaryError
+
+================================================================================
+INFORMAÇÕES DO AMBIENTE DE PRODUÇÃO
+================================================================================
+
+VPS: Hostinger srv1137163.hstgr.cloud
+IP: 72.61.55.172
+Container: voz-do-povo-api (Docker)
+Backend: Django 5.2.8 + Gunicorn (3 workers, timeout 300s)
+Database: Supabase PostgreSQL
+Storage: Cloudinary CDN (cloud_name: dphpzghkh)
+Python: 3.x
+Django REST Framework: Última versão
+
+Cloudinary URL de teste (funcionando):
+https://res.cloudinary.com/dphpzghkh/image/upload/v1/media/denuncias_fotos/test_real_bddtis
+
+Storage Backend: MediaCloudinaryStorage (VERIFICADO)
+
+================================================================================
+PRÓXIMOS PASSOS RECOMENDADOS (ATUALIZADO)
+================================================================================
+
+1. BACKEND DEVELOPER (URGENTE!) - Bruno Santos:
+   ⚠️ O problema está NO BACKEND, não no Flutter!
+   
+   a) EXECUTAR TESTE DIAGNÓSTICO (código acima no checklist item 2)
+      - Vai revelar o erro exato que está acontecendo
+      - Copiar o traceback completo
+   
+   b) ATIVAR DEBUG=True NO CONTAINER
+      docker exec -it voz-do-povo-api bash -c "echo 'DEBUG=True' >> /app/.env"
+      docker restart voz-do-povo-api
+      - Reproduzir erro pelo Flutter
+      - Coletar traceback dos logs
+   
+   c) VERIFICAR SERIALIZER
+      - Checar se campos cidade, estado, jurisdicao, endereco existem
+      - Verificar se Meta.fields = '__all__' ou lista explícita
+      - Confirmar que autor_convidado está como write_only
+   
+   d) RECONSTRUIR CONTAINER COM LOGS
+      docker compose down
+      git pull
+      docker compose build --no-cache
+      docker compose up -d
+      docker logs -f voz-do-povo-api
+
+2. FLUTTER DEVELOPER:
+   ✅ Flutter está correto - NADA A FAZER por enquanto
+   - Aguardar correção do backend
+   - Logs já estão perfeitos para debugging
+
+3. VALIDAÇÃO FINAL (Após correção do backend):
+   - Testar criação de denúncia pelo Flutter
+   - Verificar URL da foto no Cloudinary
+   - Confirmar Status 201 Created
+   - Validar dados salvos no banco
+
+================================================================================
+CONTATO E SUPORTE
+================================================================================
+
+Desenvolvedor Backend: Bruno Santos
+Email: [seu_email@exemplo.com]
+GitHub: https://github.com/eibrunoruan/VOZ-API
+
+Documentação da API: [URL da documentação, se houver]
+Swagger/OpenAPI: [URL do Swagger, se houver]
+
+Para dúvidas ou assistência adicional, entre em contato via email ou GitHub.
+
+================================================================================
+FIM DO RELATÓRIO (ATUALIZADO 24/Nov/2025 - 01:30)
+================================================================================
+
+⚠️ RETIFICAÇÃO IMPORTANTE:
+
+Após análise detalhada dos logs completos do Flutter, confirmamos que:
+
+❌ DIAGNÓSTICO ANTERIOR ESTAVA INCORRETO
+✅ Flutter está enviando TODOS os dados corretamente
+✅ autor_convidado presente ("okok")
+✅ Foto válida (13.61 KB JPEG)
+✅ Todos os campos obrigatórios presentes
+✅ ContentType e formato corretos
+
+🎯 CONCLUSÃO CORRETA:
+O problema está NO BACKEND DJANGO ao processar requisições HTTP multipart/form-data
+reais vindas de clientes externos (não simuladas via RequestFactory).
+
+Os testes via Django Shell funcionaram porque são simulações internas, mas
+requisições HTTP reais estão falhando. Isso indica problema no:
+- Serializer (campos extras não declarados: cidade, estado, jurisdicao, endereco)
+- Parser de multipart data
+- Middleware ou permissões
+- Upload Cloudinary em requisições HTTP reais
+
+🔧 AÇÃO NECESSÁRIA:
+Backend developer deve executar o teste diagnóstico fornecido no checklist
+e ativar DEBUG=True para capturar o traceback completo do erro 500.
+
+Este erro é um 500 Internal Server Error do Django, NÃO um erro do cliente.

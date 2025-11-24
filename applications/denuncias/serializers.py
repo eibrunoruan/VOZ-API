@@ -40,7 +40,12 @@ class DenunciaSerializer(serializers.ModelSerializer):
     """
     autor = UserSerializer(read_only=True, required=False)
     total_apoios = serializers.IntegerField(read_only=True, default=0)  # Vem do annotate
-    autor_convidado = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    autor_convidado = serializers.CharField(
+        max_length=150, 
+        required=False, 
+        allow_blank=True,
+        write_only=False  # Permite ler e escrever
+    )
     categoria_nome = serializers.CharField(source='categoria.nome', read_only=True)
     cidade_nome = serializers.CharField(source='cidade.nome', read_only=True)
     estado_nome = serializers.CharField(source='estado.nome', read_only=True)
@@ -55,6 +60,9 @@ class DenunciaSerializer(serializers.ModelSerializer):
             'data_criacao', 'total_apoios'
         ]
         read_only_fields = ('autor', 'data_criacao', 'total_apoios')
+        extra_kwargs = {
+            'autor_convidado': {'write_only': False, 'required': False}
+        }
 
     def validate(self, data):
         request = self.context.get('request')

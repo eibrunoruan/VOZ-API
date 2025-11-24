@@ -97,13 +97,17 @@ def criar_ou_apoiar_denuncia(validated_data, user=None, autor_convidado=None):
         logger.info(f"Nenhuma denuncia similar encontrada em {SEARCH_RADIUS_METERS}m")
         logger.info(f"Criando nova denuncia...")
         
-        denuncia_data = {
-            'autor': user if user else None,
-            'autor_convidado': autor_convidado if not user else None,
-            **validated_data
-        }
+        # Remover autor_convidado do validated_data para evitar conflito
+        denuncia_data = validated_data.copy()
+        denuncia_data.pop('autor_convidado', None)
+        
+        # Adicionar autor e autor_convidado explicitamente
+        denuncia_data['autor'] = user if user else None
+        denuncia_data['autor_convidado'] = autor_convidado if not user else None
+        
         nova_denuncia = Denuncia.objects.create(**denuncia_data)
         
         logger.info(f"Nova denuncia criada (ID: {nova_denuncia.id})")
+        logger.info(f"Autor: {nova_denuncia.autor or nova_denuncia.autor_convidado}")
         
         return nova_denuncia, True, False
