@@ -1,5 +1,5 @@
 from rest_framework import generics, status, serializers
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -138,3 +138,32 @@ class PasswordResetConfirmView(APIView):
         user.save()
 
         return Response({'message': 'Senha redefinida com sucesso.'}, status=status.HTTP_200_OK)
+
+class MeView(APIView):
+    """
+    Endpoint para obter informações do usuário autenticado.
+    GET /api/auth/me/
+    Retorna: username, email, first_name, last_name, is_email_verified, date_joined
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def put(self, request, *args, **kwargs):
+        """
+        Atualiza informações do usuário autenticado.
+        Campos permitidos: first_name, last_name, username
+        """
+        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def patch(self, request, *args, **kwargs):
+        """
+        Atualiza parcialmente informações do usuário autenticado.
+        """
+        return self.put(request, *args, **kwargs)
